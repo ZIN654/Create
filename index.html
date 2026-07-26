@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>INSPECTOR — 3D Model Viewer</title>
+<meta name="description" content="A browser-based 3D asset inspection tool. Load GLB, GLTF, OBJ, FBX, STL and PLY files and inspect geometry, materials and textures — entirely client-side." />
+<link rel="icon" href="data:," />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/main.css" />
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+
+<div id="app" class="app">
+
+  <!-- ============ HEADER ============ -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">◈</span>
+      <span class="brand-name">INSPECTOR</span>
+      <span class="brand-sub">3D asset viewer</span>
+    </div>
+    <div class="topbar-status" id="topbarStatus">
+      <span class="status-dot" id="statusDot"></span>
+      <span id="statusText">No model loaded</span>
+    </div>
+    <div class="topbar-actions">
+      <button class="btn btn-ghost" id="btnTheme" title="Toggle theme" aria-label="Toggle light/dark theme">
+        <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1Z"/></svg>
+      </button>
+      <button class="btn btn-ghost" id="btnHelp" title="Keyboard shortcuts" aria-label="Show keyboard shortcuts">?</button>
+    </div>
+  </header>
+
+  <!-- ============ MOBILE TABS ============ -->
+  <nav class="mobile-tabs" id="mobileTabs" aria-label="Panel selector">
+    <button class="mtab active" data-panel="viewer">Viewer</button>
+    <button class="mtab" data-panel="left">Inspect</button>
+    <button class="mtab" data-panel="right">Materials</button>
+  </nav>
+
+  <div class="layout">
+
+    <!-- ============ LEFT SIDEBAR ============ -->
+    <aside class="panel panel-left" id="panelLeft" data-panel="left">
+
+      <section class="block" id="uploadBlock">
+        <h2 class="block-title">Upload</h2>
+        <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Upload a 3D model file">
+          <svg viewBox="0 0 24 24" width="22" height="22" class="dropzone-icon"><path fill="currentColor" d="M12 3l4.5 4.5-1.4 1.4L13 6.83V16h-2V6.83L8.9 8.9 7.5 7.5 12 3zM5 18h14v2H5z"/></svg>
+          <p><strong>Drop a model</strong> or click to browse</p>
+          <p class="dropzone-hint">GLB · GLTF · OBJ · FBX · STL · PLY</p>
+          <input type="file" id="fileInput" accept=".glb,.gltf,.obj,.fbx,.stl,.ply" hidden />
+        </div>
+        <div class="row-buttons">
+          <button class="btn btn-sm" id="btnSample">Load sample</button>
+          <button class="btn btn-sm" id="btnClear" disabled>Clear scene</button>
+        </div>
+      </section>
+
+      <section class="block" id="fileInfoBlock" hidden>
+        <h2 class="block-title">File information</h2>
+        <dl class="kv" id="fileInfoList"></dl>
+      </section>
+
+      <section class="block" id="statsBlock" hidden>
+        <h2 class="block-title">Mesh statistics</h2>
+        <dl class="kv kv-mono" id="statsList"></dl>
+      </section>
+
+      <section class="block block-grow" id="hierarchyBlock" hidden>
+        <h2 class="block-title">Scene explorer</h2>
+        <div class="tree" id="sceneTree"></div>
+      </section>
+
+    </aside>
+
+    <!-- ============ CENTER VIEWER ============ -->
+    <main class="viewer-wrap" id="viewerWrap" data-panel="viewer">
+      <div class="viewer-frame">
+        <canvas id="viewerCanvas"></canvas>
+
+        <!-- viewfinder HUD -->
+        <div class="hud" aria-hidden="true">
+          <span class="bracket bracket-tl"></span>
+          <span class="bracket bracket-tr"></span>
+          <span class="bracket bracket-bl"></span>
+          <span class="bracket bracket-br"></span>
+          <span class="hud-tick hud-tick-top"></span>
+          <span class="hud-tick hud-tick-bottom"></span>
+          <span class="hud-tick hud-tick-left"></span>
+          <span class="hud-tick hud-tick-right"></span>
+        </div>
+
+        <div class="viewer-empty" id="viewerEmpty">
+          <span class="empty-glyph">◈</span>
+          <p>Drop a model to begin inspection</p>
+        </div>
+
+        <div class="fps-readout" id="fpsReadout">
+          <span id="fpsValue">--</span> <small>fps</small>
+        </div>
+
+        <div class="mode-readout" id="modeReadout">SHADED</div>
+
+        <div class="toast" id="toast"></div>
+      </div>
+    </main>
+
+    <!-- ============ RIGHT SIDEBAR ============ -->
+    <aside class="panel panel-right" id="panelRight" data-panel="right">
+
+      <section class="block">
+        <h2 class="block-title">Material inspector</h2>
+        <select class="select" id="materialSelect"><option>No materials</option></select>
+        <dl class="kv kv-mono" id="materialProps"></dl>
+      </section>
+
+      <section class="block">
+        <h2 class="block-title">Lighting</h2>
+        <div class="field">
+          <label for="ambientIntensity">Ambient <span id="ambientVal">0.6</span></label>
+          <input type="range" id="ambientIntensity" min="0" max="3" step="0.05" value="0.6" />
+        </div>
+        <div class="field">
+          <label for="keyIntensity">Directional <span id="keyVal">1.8</span></label>
+          <input type="range" id="keyIntensity" min="0" max="5" step="0.05" value="1.8" />
+        </div>
+        <div class="field">
+          <label for="exposure">Exposure <span id="exposureVal">1.0</span></label>
+          <input type="range" id="exposure" min="0" max="3" step="0.05" value="1.0" />
+        </div>
+        <div class="field">
+          <label for="bgColor">Background</label>
+          <input type="color" id="bgColor" value="#0b0e11" />
+        </div>
+      </section>
+
+      <section class="block">
+        <h2 class="block-title">Camera</h2>
+        <dl class="kv kv-mono" id="cameraProps"></dl>
+        <div class="row-buttons">
+          <button class="btn btn-sm" id="btnResetCam">Reset</button>
+          <button class="btn btn-sm" id="btnFitCam">Fit to model</button>
+        </div>
+      </section>
+
+    </aside>
+  </div>
+
+  <!-- ============ BOTTOM TOOLBAR ============ -->
+  <footer class="toolbar">
+    <div class="toolbar-group" id="renderModes">
+      <span class="toolbar-label">Render</span>
+      <button class="chip active" data-mode="shaded">Shaded</button>
+      <button class="chip" data-mode="unlit">Unlit</button>
+      <button class="chip" data-mode="wireframe">Wireframe</button>
+      <button class="chip" data-mode="normal">Normals</button>
+      <button class="chip" data-mode="uv">UV Checker</button>
+      <button class="chip" data-mode="matcap">Matcap</button>
+    </div>
+    <div class="toolbar-divider"></div>
+    <div class="toolbar-group" id="sceneTools">
+      <span class="toolbar-label">Scene</span>
+      <button class="chip active" data-tool="grid">Grid</button>
+      <button class="chip active" data-tool="axis">Axis</button>
+      <button class="chip" data-tool="rotate">Auto-rotate</button>
+      <button class="chip" data-tool="shadows">Shadows</button>
+    </div>
+    <div class="toolbar-divider"></div>
+    <div class="toolbar-group" id="captureTools">
+      <span class="toolbar-label">Capture</span>
+      <button class="chip" id="btnScreenshot">Screenshot</button>
+      <button class="chip" id="btnFullscreen">Fullscreen</button>
+    </div>
+  </footer>
+
+</div>
+
+<!-- Shortcuts modal -->
+<div class="modal-backdrop" id="modalBackdrop" hidden>
+  <div class="modal" role="dialog" aria-label="Keyboard shortcuts">
+    <h3>Keyboard shortcuts</h3>
+    <dl class="kv">
+      <dt>F</dt><dd>Frame / fit model</dd>
+      <dt>W</dt><dd>Toggle wireframe</dd>
+      <dt>G</dt><dd>Toggle grid</dd>
+      <dt>R</dt><dd>Toggle auto-rotate</dd>
+      <dt>S</dt><dd>Take screenshot</dd>
+    </dl>
+    <button class="btn" id="btnCloseModal">Close</button>
+  </div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
